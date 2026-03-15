@@ -1399,8 +1399,8 @@ Route::get('/new_company.php', $render('auth.new_company'))->name('company.new')
 Route::get('/new_employee.php', $render('auth.new_employee'))->name('employee.new');
 Route::get('/new_surveillanceRecord.php', $render('auth.new_surveillanceRecord'))->name('surveillance.record.new');
 
-Route::get('/login.php', $render('auth.login'))->name('login');
-Route::get('/forgot_password.php', $render('auth.forgot_password'))->name('password.request');
+Route::get('/login.php', $renderPublicAuthView('auth.login'))->name('login');
+Route::get('/forgot_password.php', $renderPublicAuthView('auth.forgot_password'))->name('password.request');
 Route::get('/surveillance/company/new', $render('auth.new_company'))->name('surveillance.company.new');
 Route::get('/surveillance/company/{id}/edit', $render('auth.edit_surveillanceComp'))->name('surveillance.company.edit');
 Route::get('/surveillance/company/{id}/delete', $render('auth.delete_surveillanceComp'))->name('surveillance.company.delete');
@@ -2242,6 +2242,7 @@ Route::post('/surveillance/removal-report/save', function (Request $request) use
 
     return redirect()->route('general.report')->with('status', 'Removal report saved successfully.');
 })->name('surveillance.report.removal.save');
+
 
 
 
