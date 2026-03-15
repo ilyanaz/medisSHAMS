@@ -57,3 +57,36 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+## Vercel Test Deployment
+
+This project can be smoke-tested on Vercel, but it is not fully production-ready there yet.
+
+Known limitation:
+- Uploaded files and generated files stored on the local filesystem will not persist on Vercel. For production, move uploads/signatures/headers to external object storage.
+
+Recommended Vercel setup:
+1. Import the GitHub repository into Vercel.
+2. Set the project Root Directory to `medis-app`.
+3. Keep the framework preset as `Other`.
+4. Add these environment variables in Vercel:
+   - `APP_NAME=medisSHAMS`
+   - `APP_ENV=production`
+   - `APP_DEBUG=false`
+   - `APP_URL=https://your-vercel-domain.vercel.app`
+   - `APP_KEY=base64:...`
+   - `DB_CONNECTION=mysql`
+   - `DB_HOST=...`
+   - `DB_PORT=3306`
+   - `DB_DATABASE=...`
+   - `DB_USERNAME=...`
+   - `DB_PASSWORD=...`
+   - `LOG_CHANNEL=stderr`
+   - `SESSION_DRIVER=cookie`
+   - `CACHE_STORE=array`
+   - `QUEUE_CONNECTION=sync`
+5. Deploy.
+
+Notes:
+- The included `vercel.json` and `server.php` are configured for a Vercel test deployment.
+- The app now redirects Laravel storage paths used at runtime to `/tmp` for serverless compatibility.
