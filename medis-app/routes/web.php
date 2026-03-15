@@ -86,16 +86,42 @@ $resolveSettingsUser = static function () {
 };
 
 $resolveViewData = static function () use ($resolveLogoUrl, $resolveDoctorProfile, $resolveSettingsUser): array {
-    $clinic = class_exists(Clinic::class) ? Clinic::query()->first() : null;
-    $doctor = $resolveDoctorProfile();
-    $user = $resolveSettingsUser();
+    $clinic = null;
+    $doctor = null;
+    $user = null;
+    $companies = collect();
+
+    try {
+        $clinic = class_exists(Clinic::class) ? Clinic::query()->first() : null;
+    } catch (\Throwable $e) {
+        $clinic = null;
+    }
+
+    try {
+        $doctor = $resolveDoctorProfile();
+    } catch (\Throwable $e) {
+        $doctor = null;
+    }
+
+    try {
+        $user = $resolveSettingsUser();
+    } catch (\Throwable $e) {
+        $user = null;
+    }
+
+    try {
+        $companies = DB::table('company')->orderBy('company_name')->get();
+    } catch (\Throwable $e) {
+        $companies = collect();
+    }
+
     $username = $user->username ?? $doctor->doctor_username ?? 'User';
 
     return [
         'clinicName' => $clinic?->clinic_name ?: 'Medis SHAMS',
         'clinicLogoUrl' => !empty($clinic?->clinic_logo) ? $resolveLogoUrl($clinic?->clinic_logo) : (!empty($clinic?->clinic_header) ? 'data:image/png;base64,'.base64_encode($clinic->clinic_header) : null),
         'username' => $username,
-        'companies' => DB::table('company')->orderBy('company_name')->get(),
+        'companies' => $companies,
         'doctorProfile' => $doctor,
         'settingsData' => $user,
     ];
@@ -2216,6 +2242,9 @@ Route::post('/surveillance/removal-report/save', function (Request $request) use
 
     return redirect()->route('general.report')->with('status', 'Removal report saved successfully.');
 })->name('surveillance.report.removal.save');
+
+
+
 
 
 
