@@ -1,0 +1,26 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="medisGreen" x1="70" y1="60" x2="430" y2="430" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#56B778"/>
+      <stop offset="1" stop-color="#2E7D4F"/>
+    </linearGradient>
+  </defs>
+  <g stroke="url(#medisGreen)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M160 140C188 110 220 94 256 90V200C221 200 189 190 160 170V140Z" fill="url(#medisGreen)"/>
+    <path d="M256 82H312V200H256V82Z" fill="url(#medisGreen)"/>
+    <path d="M330 92C365 99 396 116 424 145V172C397 191 365 200 330 200V92Z" fill="url(#medisGreen)"/>
+    <path d="M132 214H380"/>
+    <path d="M144 214C184 214 214 225 238 244C248 252 264 252 274 244C298 225 328 214 368 214"/>
+    <path d="M178 240C184 264 196 282 214 298"/>
+    <path d="M334 240C328 264 316 282 298 298"/>
+    <path d="M184 256C140 276 122 304 130 336C146 399 186 438 248 446"/>
+    <path d="M328 256C372 276 390 304 382 336C366 399 326 438 264 446"/>
+    <path d="M256 264V436"/>
+    <path d="M196 300C208 345 228 370 256 382"/>
+    <path d="M316 300C304 345 284 370 256 382"/>
+    <path d="M256 436V470C256 494 274 512 298 512H366"/>
+    <path d="M366 512V474C366 460 378 448 392 448H424"/>
+    <circle cx="446" cy="446" r="22"/>
+    <path d="M402 434C414 440 421 446 424 456"/>
+  </g>
+</svg>
