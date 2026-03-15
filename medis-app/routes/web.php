@@ -86,42 +86,16 @@ $resolveSettingsUser = static function () {
 };
 
 $resolveViewData = static function () use ($resolveLogoUrl, $resolveDoctorProfile, $resolveSettingsUser): array {
-    $clinic = null;
-    $doctor = null;
-    $user = null;
-    $companies = collect();
-
-    try {
-        $clinic = class_exists(Clinic::class) ? Clinic::query()->first() : null;
-    } catch (\Throwable $e) {
-        $clinic = null;
-    }
-
-    try {
-        $doctor = $resolveDoctorProfile();
-    } catch (\Throwable $e) {
-        $doctor = null;
-    }
-
-    try {
-        $user = $resolveSettingsUser();
-    } catch (\Throwable $e) {
-        $user = null;
-    }
-
-    try {
-        $companies = DB::table('company')->orderBy('company_name')->get();
-    } catch (\Throwable $e) {
-        $companies = collect();
-    }
-
+    $clinic = class_exists(Clinic::class) ? Clinic::query()->first() : null;
+    $doctor = $resolveDoctorProfile();
+    $user = $resolveSettingsUser();
     $username = $user->username ?? $doctor->doctor_username ?? 'User';
 
     return [
         'clinicName' => $clinic?->clinic_name ?: 'Medis SHAMS',
         'clinicLogoUrl' => !empty($clinic?->clinic_logo) ? $resolveLogoUrl($clinic?->clinic_logo) : (!empty($clinic?->clinic_header) ? 'data:image/png;base64,'.base64_encode($clinic->clinic_header) : null),
         'username' => $username,
-        'companies' => $companies,
+        'companies' => DB::table('company')->orderBy('company_name')->get(),
         'doctorProfile' => $doctor,
         'settingsData' => $user,
     ];
@@ -1399,8 +1373,8 @@ Route::get('/new_company.php', $render('auth.new_company'))->name('company.new')
 Route::get('/new_employee.php', $render('auth.new_employee'))->name('employee.new');
 Route::get('/new_surveillanceRecord.php', $render('auth.new_surveillanceRecord'))->name('surveillance.record.new');
 
-Route::get('/login.php', $renderPublicAuthView('auth.login'))->name('login');
-Route::get('/forgot_password.php', $renderPublicAuthView('auth.forgot_password'))->name('password.request');
+Route::get('/login.php', $render('auth.login'))->name('login');
+Route::get('/forgot_password.php', $render('auth.forgot_password'))->name('password.request');
 Route::get('/surveillance/company/new', $render('auth.new_company'))->name('surveillance.company.new');
 Route::get('/surveillance/company/{id}/edit', $render('auth.edit_surveillanceComp'))->name('surveillance.company.edit');
 Route::get('/surveillance/company/{id}/delete', $render('auth.delete_surveillanceComp'))->name('surveillance.company.delete');
@@ -2242,6 +2216,7 @@ Route::post('/surveillance/removal-report/save', function (Request $request) use
 
     return redirect()->route('general.report')->with('status', 'Removal report saved successfully.');
 })->name('surveillance.report.removal.save');
+
 
 
 
