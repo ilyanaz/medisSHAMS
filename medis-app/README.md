@@ -58,3 +58,31 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
 
+## Railway Deployment
+
+This project can be tested on Railway with the app root set to `medis-app`.
+
+### Recommended setup
+
+1. Create a new Railway project and connect this GitHub repository.
+2. Set the service root directory to `medis-app`.
+3. Railway will use [`railway.json`](./railway.json) and start the app with:
+   - `php artisan serve --host=0.0.0.0 --port=${PORT:-8080}`
+4. Add environment variables:
+   - `APP_NAME=medisSHAMS`
+   - `APP_ENV=production`
+   - `APP_DEBUG=false`
+   - `APP_KEY=base64:...`
+   - `APP_URL=https://<your-railway-domain>`
+   - `DB_CONNECTION=mysql`
+   - `DB_HOST=...`
+   - `DB_PORT=3306`
+   - `DB_DATABASE=...`
+   - `DB_USERNAME=...`
+   - `DB_PASSWORD=...`
+
+### Notes
+
+- The app currently serves many PHP-rendered pages directly from Laravel routes such as `/login.php` and `/general_report.php`.
+- Uploaded files and generated assets are still stored on the local filesystem, so Railway is suitable for dev/testing first. For longer-term production use, move uploads/signatures to persistent object storage.
+
