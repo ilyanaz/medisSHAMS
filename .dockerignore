@@ -1,0 +1,9 @@
+.git
+.gitignore
+medis-app/vendor
+medis-app/node_modules
+medis-app/storage/logs
+medis-app/storage/framework/cache
+medis-app/storage/framework/sessions
+medis-app/storage/framework/views
+medis-app/.env

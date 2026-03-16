@@ -65,10 +65,12 @@ This project can be tested on Railway with the app root set to `medis-app`.
 ### Recommended setup
 
 1. Create a new Railway project and connect this GitHub repository.
-2. Set the service root directory to `medis-app`.
-3. Railway will use [`railway.json`](./railway.json) and start the app with:
+2. Preferred: set the service root directory to `medis-app`.
+3. Railway will use [`railway.json`](./railway.json) and the local [`Dockerfile`](./Dockerfile), then start the app with:
    - `php artisan serve --host=0.0.0.0 --port=${PORT:-8080}`
-4. Add environment variables:
+4. This avoids Nixpacks trying to run `npm run build` from the Laravel app directory.
+5. If Railway still fails to detect the nested Laravel app, deploy from the repository root and let Railway use the root-level `Dockerfile`.
+6. Add environment variables:
    - `APP_NAME=medisSHAMS`
    - `APP_ENV=production`
    - `APP_DEBUG=false`
@@ -85,4 +87,5 @@ This project can be tested on Railway with the app root set to `medis-app`.
 
 - The app currently serves many PHP-rendered pages directly from Laravel routes such as `/login.php` and `/general_report.php`.
 - Uploaded files and generated assets are still stored on the local filesystem, so Railway is suitable for dev/testing first. For longer-term production use, move uploads/signatures to persistent object storage.
+- If you see a Railpack or Nixpacks build error, Railway is still trying to infer a Node build. Keep the config file set to `/medis-app/railway.json` so it uses the local Dockerfile instead.
 
