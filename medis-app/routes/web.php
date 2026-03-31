@@ -10,6 +10,18 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 
+$passwordMatches = static function (string $plainPassword, string $storedPassword): bool {
+    try {
+        if (Hash::check($plainPassword, $storedPassword)) {
+            return true;
+        }
+    } catch (\RuntimeException) {
+        // Some imported rows still use plain-text passwords.
+    }
+
+    return hash_equals($storedPassword, $plainPassword);
+};
+
 $resolveLogoUrl = static function (?string $logo): ?string {
     if (! $logo) {
         return null;
@@ -683,8 +695,227 @@ $loadCurrentSurveillance = static function (?Request $request = null) use ($reso
     ];
 };
 
-$render = static function (string $view, ?callable $extra = null) use ($resolveViewData, $loadCurrentSurveillance, $refreshCompanyWorkerTotals, $computeSectionStatuses, $buildUsechh5iiData) {
-    return function (...$routeArgs) use ($view, $extra, $resolveViewData, $loadCurrentSurveillance, $refreshCompanyWorkerTotals, $computeSectionStatuses, $buildUsechh5iiData) {
+$audioFrequencies = [
+    '250' => '250',
+    '500' => '500',
+    '1000' => '1k',
+    '2000' => '2k',
+    '3000' => '3k',
+    '4000' => '4k',
+    '6000' => '6k',
+    '8000' => '8k',
+];
+
+$buildAudiometrySeries = static function ($row, ?string $dateLabel, string $side) use ($audioFrequencies): array {
+    $prefix = strtoupper($side) === 'RIGHT' ? 'R_' : 'L_';
+    $series = [
+        'date' => $dateLabel ?: '-',
+        'type' => strtoupper($side),
+        'values' => [],
+    ];
+
+    foreach ($audioFrequencies as $hz => $suffix) {
+        $series['values'][$hz] = $row ? (string) ($row->{$prefix.$suffix} ?? '') : '';
+    }
+
+    return $series;
+};
+
+$calculateAudiometryAverage = static function ($row, string $side, array $frequencies) use ($audioFrequencies): float {
+    if (! $row) {
+        return 0.0;
+    }
+
+    $prefix = strtoupper($side) === 'RIGHT' ? 'R_' : 'L_';
+    $values = [];
+
+    foreach ($frequencies as $hz) {
+        $suffix = $audioFrequencies[$hz] ?? null;
+        if (! $suffix) {
+            continue;
+        }
+
+        $value = $row->{$prefix.$suffix} ?? null;
+        if ($value === null || $value === '') {
+            return 0.0;
+        }
+
+        $values[] = (float) $value;
+    }
+
+    return $values === [] ? 0.0 : round(array_sum($values) / count($values), 2);
+};
+
+$computeAudiometryStatuses = static function ($audiometryTest, $pastMedical, $baselineRow, $annualRow, array $summaryRightRows, array $latestAnnualRows, $audioComments): array {
+    $informationComplete = $audiometryTest
+        && ! empty($audiometryTest->audioTest_date)
+        && $audiometryTest->total_years_working !== null
+        && $audiometryTest->noYears_working !== null
+        && $audiometryTest->audiometer !== null
+        && ! empty($audiometryTest->calibration_date)
+        && $pastMedical
+        && $pastMedical->ear_infections !== null
+        && $pastMedical->head_injury !== null
+        && $pastMedical->ototoxic_drugs !== null
+        && $pastMedical->prev_earSurgery !== null
+        && trim((string) ($pastMedical->pre_noiseExposure ?? '')) !== ''
+        && trim((string) ($pastMedical->significant_hobbies ?? '')) !== ''
+        && $pastMedical->seg !== null
+        && $pastMedical->otoscopy !== null
+        && trim((string) ($pastMedical->audio_rinneRight ?? '')) !== ''
+        && trim((string) ($pastMedical->audio_rinneLeft ?? '')) !== ''
+        && trim((string) ($pastMedical->audio_weber ?? '')) !== '';
+
+    $audiographComplete = static function ($row): bool {
+        if (! $row) {
+            return false;
+        }
+
+        foreach ([
+            'R_250', 'R_500', 'R_1k', 'R_2k', 'R_3k', 'R_4k', 'R_6k', 'R_8k',
+            'L_250', 'L_500', 'L_1k', 'L_2k', 'L_3k', 'L_4k', 'L_6k', 'L_8k',
+            'bone_R250', 'bone_R500', 'bone_R1k', 'bone_R2k', 'bone_R3k', 'bone_R4k', 'bone_R6k', 'bone_R8k',
+            'bone_L250', 'bone_L500', 'bone_L1k', 'bone_L2k', 'bone_L3k', 'bone_L4k', 'bone_L6k', 'bone_L8k',
+        ] as $column) {
+            if (($row->{$column} ?? null) === null || $row->{$column} === '') {
+                return false;
+            }
+        }
+
+        return true;
+    };
+
+    $commentsComplete = $audioComments
+        && trim((string) ($audioComments->STS_right ?? '')) !== ''
+        && trim((string) ($audioComments->STS_left ?? '')) !== ''
+        && trim((string) ($audioComments->standard_analysis ?? '')) !== ''
+        && trim((string) ($audioComments->audio_recommendation ?? '')) !== ''
+        && trim((string) ($audioComments->remarks ?? '')) !== '';
+
+    return [
+        'information' => $informationComplete,
+        'baseline' => $audiographComplete($baselineRow) && $audiographComplete($annualRow),
+        'summary' => count($summaryRightRows) > 0 && count($latestAnnualRows) > 0,
+        'comments' => $commentsComplete,
+    ];
+};
+
+$loadCurrentAudiometry = static function (?Request $request = null) use ($resolveDoctorProfile, $buildAudiometrySeries, $calculateAudiometryAverage, $computeAudiometryStatuses) {
+    $selectedCompanyId = (int) ($request?->query('company_id') ?? $request?->session()?->get('current_company_id') ?? 0);
+    $selectedEmployeeId = (int) ($request?->query('employee_id') ?? $request?->session()?->get('current_employee_id') ?? 0);
+    $audiometryId = (int) ($request?->query('audiometry_id') ?? $request?->session()?->get('current_audiometry_id') ?? 0);
+
+    if ($selectedCompanyId > 0) {
+        $request?->session()?->put('current_company_id', $selectedCompanyId);
+    }
+    if ($selectedEmployeeId > 0) {
+        $request?->session()?->put('current_employee_id', $selectedEmployeeId);
+    }
+
+    $selectedCompany = $selectedCompanyId > 0 ? DB::table('company')->where('company_id', $selectedCompanyId)->first() : null;
+    $selectedEmployee = $selectedEmployeeId > 0 ? DB::table('employee')->where('employee_id', $selectedEmployeeId)->first() : null;
+    $currentOccupationalHistory = $selectedEmployeeId > 0 ? DB::table('occupational_history')->where('employee_id', $selectedEmployeeId)->orderBy('occupHistory_id')->first() : null;
+
+    $audiometryTest = null;
+    if ($audiometryId > 0) {
+        $audiometryTest = DB::table('audiometry_test')->where('audiometry_id', $audiometryId)->first();
+    }
+    if (! $audiometryTest && $selectedEmployeeId > 0) {
+        $query = DB::table('audiometry_test')->where('employee_id', $selectedEmployeeId);
+        if ($selectedCompanyId > 0) {
+            $query->where('company_id', $selectedCompanyId);
+        }
+        $audiometryTest = $query->orderByDesc('audioTest_date')->orderByDesc('audiometry_id')->first();
+    }
+
+    if ($audiometryTest) {
+        $audiometryId = (int) $audiometryTest->audiometry_id;
+        $request?->session()?->put('current_audiometry_id', $audiometryId);
+        if ($selectedCompanyId <= 0) {
+            $selectedCompanyId = (int) ($audiometryTest->company_id ?? 0);
+            $selectedCompany = $selectedCompanyId > 0 ? DB::table('company')->where('company_id', $selectedCompanyId)->first() : $selectedCompany;
+        }
+        if ($selectedEmployeeId <= 0) {
+            $selectedEmployeeId = (int) ($audiometryTest->employee_id ?? 0);
+            $selectedEmployee = $selectedEmployeeId > 0 ? DB::table('employee')->where('employee_id', $selectedEmployeeId)->first() : $selectedEmployee;
+        }
+        if (! $currentOccupationalHistory && $selectedEmployeeId > 0) {
+            $currentOccupationalHistory = DB::table('occupational_history')->where('employee_id', $selectedEmployeeId)->orderBy('occupHistory_id')->first();
+        }
+    }
+
+    $pastMedical = $audiometryId > 0 ? DB::table('audiometry_pastmedical')->where('audiometry_id', $audiometryId)->first() : ($selectedEmployeeId > 0 ? DB::table('audiometry_pastmedical')->where('employee_id', $selectedEmployeeId)->first() : null);
+    $baselineAudiograph = $audiometryId > 0 ? DB::table('baseline_audiograph')->where('audiometry_id', $audiometryId)->first() : null;
+    $annualAudiograph = $audiometryId > 0 ? DB::table('annual_audiograph')->where('audiometry_id', $audiometryId)->first() : null;
+    $audioComments = $audiometryId > 0 ? DB::table('audio_comments')->where('audiometry_id', $audiometryId)->first() : null;
+
+    $latestBaseline = null;
+    if ($selectedEmployeeId > 0) {
+        $baselineQuery = DB::table('baseline_audiograph as b')
+            ->join('audiometry_test as t', 'b.audiometry_id', '=', 't.audiometry_id')
+            ->where('b.employee_id', $selectedEmployeeId);
+        if ($selectedCompanyId > 0) {
+            $baselineQuery->where('b.company_id', $selectedCompanyId);
+        }
+        $latestBaseline = $baselineQuery->orderByDesc('t.audioTest_date')->orderByDesc('b.baselineAudio_id')->select('b.*', 't.audioTest_date')->first();
+    }
+
+    $latestAnnuals = collect();
+    if ($selectedEmployeeId > 0) {
+        $annualQuery = DB::table('annual_audiograph as a')
+            ->join('audiometry_test as t', 'a.audiometry_id', '=', 't.audiometry_id')
+            ->where('a.employee_id', $selectedEmployeeId);
+        if ($selectedCompanyId > 0) {
+            $annualQuery->where('a.company_id', $selectedCompanyId);
+        }
+        $latestAnnuals = $annualQuery->orderByDesc('t.audioTest_date')->orderByDesc('a.annualAudio_id')->select('a.*', 't.audioTest_date')->limit(5)->get();
+    }
+
+    $summaryRightRows = [];
+    $summaryLeftRows = [];
+    if ($latestBaseline) {
+        $summaryRightRows[] = array_merge(['tone' => 'Baseline'], $buildAudiometrySeries($latestBaseline, $latestBaseline->audioTest_date ?? null, 'RIGHT'));
+        $summaryLeftRows[] = array_merge(['tone' => 'Baseline'], $buildAudiometrySeries($latestBaseline, $latestBaseline->audioTest_date ?? null, 'LEFT'));
+    }
+    foreach ($latestAnnuals as $index => $annualSeries) {
+        $tone = 'Annual '.($index + 1);
+        $summaryRightRows[] = array_merge(['tone' => $tone], $buildAudiometrySeries($annualSeries, $annualSeries->audioTest_date ?? null, 'RIGHT'));
+        $summaryLeftRows[] = array_merge(['tone' => $tone], $buildAudiometrySeries($annualSeries, $annualSeries->audioTest_date ?? null, 'LEFT'));
+    }
+
+    $activeBaseline = $baselineAudiograph ?: $latestBaseline;
+    $activeAnnual = $annualAudiograph ?: $latestAnnuals->first();
+    $calculatedAverages = [
+        'average1_right' => $calculateAudiometryAverage($activeAnnual, 'RIGHT', ['2000', '3000', '4000']),
+        'average2_right' => $calculateAudiometryAverage($activeAnnual, 'RIGHT', ['500', '1000', '2000', '3000']),
+        'average1_left' => $calculateAudiometryAverage($activeAnnual, 'LEFT', ['2000', '3000', '4000']),
+        'average2_left' => $calculateAudiometryAverage($activeAnnual, 'LEFT', ['500', '1000', '2000', '3000']),
+    ];
+    $baselineAverageRight = $calculateAudiometryAverage($activeBaseline, 'RIGHT', ['500', '1000', '2000', '3000']);
+    $baselineAverageLeft = $calculateAudiometryAverage($activeBaseline, 'LEFT', ['500', '1000', '2000', '3000']);
+    $calculatedAverages['STS_right'] = ($calculatedAverages['average2_right'] > 0 && $baselineAverageRight > 0 && (($calculatedAverages['average2_right'] - $baselineAverageRight) >= 10)) ? 'Yes' : 'No';
+    $calculatedAverages['STS_left'] = ($calculatedAverages['average2_left'] > 0 && $baselineAverageLeft > 0 && (($calculatedAverages['average2_left'] - $baselineAverageLeft) >= 10)) ? 'Yes' : 'No';
+
+    return [
+        'selectedCompany' => $selectedCompany,
+        'selectedEmployee' => $selectedEmployee,
+        'currentOccupationalHistory' => $currentOccupationalHistory,
+        'audiometryId' => $audiometryId,
+        'audiometryTest' => $audiometryTest,
+        'pastMedical' => $pastMedical,
+        'baselineAudiograph' => $baselineAudiograph,
+        'annualAudiograph' => $annualAudiograph,
+        'audioComments' => $audioComments,
+        'doctor' => $resolveDoctorProfile(),
+        'summaryRightRows' => $summaryRightRows,
+        'summaryLeftRows' => $summaryLeftRows,
+        'calculatedAverages' => $calculatedAverages,
+        'sectionStatuses' => $computeAudiometryStatuses($audiometryTest, $pastMedical, $baselineAudiograph, $annualAudiograph, $summaryRightRows, $latestAnnuals->all(), $audioComments),
+    ];
+};
+
+$render = static function (string $view, ?callable $extra = null) use ($resolveViewData, $loadCurrentSurveillance, $refreshCompanyWorkerTotals, $computeSectionStatuses, $buildUsechh5iiData, $loadCurrentAudiometry) {
+    return function (...$routeArgs) use ($view, $extra, $resolveViewData, $loadCurrentSurveillance, $refreshCompanyWorkerTotals, $computeSectionStatuses, $buildUsechh5iiData, $loadCurrentAudiometry) {
         $data = $resolveViewData();
 
         switch ($view) {
@@ -740,6 +971,113 @@ $render = static function (string $view, ?callable $extra = null) use ($resolveV
                 }
                 $data['records'] = $recordQuery->orderByDesc('d.declaration_id')->get();
                 $data['recordTotal'] = $data['records']->count();
+                break;
+            case 'auth.audiometry_company':
+                $refreshCompanyWorkerTotals();
+                $data['companies'] = DB::table('company')->orderByDesc('company_id')->get();
+                $data['companyTotal'] = $data['companies']->count();
+                $data['selectedCompany'] = null;
+                break;
+            case 'auth.audiometry_employee':
+                $selectedCompanyId = (int) (request()->query('company_id') ?? request()->session()->get('current_company_id') ?? 0);
+                if ($selectedCompanyId > 0) {
+                    request()->session()->put('current_company_id', $selectedCompanyId);
+                }
+                $selectedCompany = $selectedCompanyId > 0 ? DB::table('company')->where('company_id', $selectedCompanyId)->first() : null;
+                $data['selectedCompany'] = $selectedCompany;
+                $currentCompanySubquery = DB::table('occupational_history')
+                    ->select('employee_id', DB::raw('MIN(occupHistory_id) as current_occ_id'))
+                    ->groupBy('employee_id');
+                $employeeQuery = DB::table('employee as e')
+                    ->leftJoinSub($currentCompanySubquery, 'current_occ', function ($join) {
+                        $join->on('e.employee_id', '=', 'current_occ.employee_id');
+                    })
+                    ->leftJoin('occupational_history as oh', 'current_occ.current_occ_id', '=', 'oh.occupHistory_id')
+                    ->select('e.*', 'oh.company_name as current_company_name');
+                if ($selectedCompany && ! empty($selectedCompany->company_name)) {
+                    $employeeQuery->where('oh.company_name', $selectedCompany->company_name);
+                }
+                $data['employees'] = $employeeQuery->orderByDesc('e.employee_id')->get();
+                $data['employeeTotal'] = $data['employees']->count();
+                break;
+            case 'auth.audiometry_list':
+                $selectedEmployeeId = (int) (request()->query('employee_id') ?? request()->session()->get('current_employee_id') ?? 0);
+                $selectedCompanyId = (int) (request()->query('company_id') ?? request()->session()->get('current_company_id') ?? 0);
+                if ($selectedEmployeeId > 0) {
+                    request()->session()->put('current_employee_id', $selectedEmployeeId);
+                }
+                if ($selectedCompanyId > 0) {
+                    request()->session()->put('current_company_id', $selectedCompanyId);
+                }
+                $data['selectedEmployee'] = $selectedEmployeeId > 0 ? DB::table('employee')->where('employee_id', $selectedEmployeeId)->first() : null;
+                $data['selectedCompany'] = $selectedCompanyId > 0 ? DB::table('company')->where('company_id', $selectedCompanyId)->first() : null;
+                $audioQuery = DB::table('audiometry_test as at')
+                    ->leftJoin('employee as e', 'at.employee_id', '=', 'e.employee_id')
+                    ->leftJoin('company as c', 'at.company_id', '=', 'c.company_id')
+                    ->leftJoin('audio_comments as ac', 'at.audiometry_id', '=', 'ac.audiometry_id')
+                    ->select(
+                        'at.*',
+                        'e.employee_firstName',
+                        'e.employee_lastName',
+                        'c.company_name',
+                        'ac.audioComments_id',
+                        'ac.audio_recommendation'
+                    );
+                if ($selectedEmployeeId > 0) {
+                    $audioQuery->where('at.employee_id', $selectedEmployeeId);
+                }
+                if ($selectedCompanyId > 0) {
+                    $audioQuery->where('at.company_id', $selectedCompanyId);
+                }
+                $records = $audioQuery->orderByDesc('at.audioTest_date')->orderByDesc('at.audiometry_id')->get()->map(static function ($row) {
+                    $row->status = $row->audioComments_id ? 'completed' : 'pending';
+                    return $row;
+                });
+                $data['records'] = $records;
+                $data['recordTotal'] = $records->count();
+                break;
+            case 'auth.audiometry_questionnaire':
+                $selectedEmployeeId = (int) (request()->query('employee_id') ?? request()->session()->get('current_employee_id') ?? 0);
+                $selectedCompanyId = (int) (request()->query('company_id') ?? request()->session()->get('current_company_id') ?? 0);
+                if ($selectedEmployeeId > 0) {
+                    request()->session()->put('current_employee_id', $selectedEmployeeId);
+                }
+                if ($selectedCompanyId > 0) {
+                    request()->session()->put('current_company_id', $selectedCompanyId);
+                }
+                $data['selectedEmployee'] = $selectedEmployeeId > 0 ? DB::table('employee')->where('employee_id', $selectedEmployeeId)->first() : null;
+                $data['selectedCompany'] = $selectedCompanyId > 0 ? DB::table('company')->where('company_id', $selectedCompanyId)->first() : null;
+                $questionnaireRows = DB::table('audiometry_test as at')
+                    ->leftJoin('employee as e', 'at.employee_id', '=', 'e.employee_id')
+                    ->leftJoin('company as c', 'at.company_id', '=', 'c.company_id')
+                    ->leftJoin('audio_comments as ac', 'at.audiometry_id', '=', 'ac.audiometry_id')
+                    ->select(
+                        'at.*',
+                        'e.employee_firstName',
+                        'e.employee_lastName',
+                        'c.company_name',
+                        'ac.audioComments_id',
+                        'ac.audio_recommendation'
+                    )
+                    ->when($selectedEmployeeId > 0, static function ($query) use ($selectedEmployeeId) {
+                        $query->where('at.employee_id', $selectedEmployeeId);
+                    })
+                    ->when($selectedCompanyId > 0, static function ($query) use ($selectedCompanyId) {
+                        $query->where('at.company_id', $selectedCompanyId);
+                    })
+                    ->orderByDesc('at.audioTest_date')
+                    ->orderByDesc('at.audiometry_id')
+                    ->get()
+                    ->map(static function ($row) {
+                        $row->status = $row->audioComments_id ? 'completed' : 'pending';
+                        return $row;
+                    });
+                $data['questionnaireRows'] = $questionnaireRows;
+                $data['questionnaireTotal'] = $questionnaireRows->count();
+                break;
+            case 'auth.audiometry_examination':
+            case 'auth.audiometry_report':
+                $data = array_merge($data, $loadCurrentAudiometry(request()));
                 break;
             case 'auth.declaration':
             case 'auth.surveillance_examination':
@@ -1046,7 +1384,7 @@ $render = static function (string $view, ?callable $extra = null) use ($resolveV
                         'status_key' => 'na',
                         'date_examined' => date('Y-m-d'),
                         'href' => route('surveillance.employee.edit', ['id' => $employeeRow->employee_id]),
-                        'pdf_href' => route('pdf.usechh1', ['employee_id' => $employeeRow->employee_id]),
+                        'pdf_href' => route('pdf.employee', ['employee_id' => $employeeRow->employee_id]),
                     ];
                 }
                 $usechh5iiGroups = [];
@@ -1100,7 +1438,11 @@ $render = static function (string $view, ?callable $extra = null) use ($resolveV
             case 'auth.edit_surveillanceEmp':
             case 'auth.delete_surveillanceEmp':
             case 'auth.surveillance_usechh1Report':
+            case 'auth.PDF_employee':
                 $employeeId = (int) ($routeArgs[0] ?? request()->route('id'));
+                if ($employeeId <= 0) {
+                    $employeeId = (int) request()->query('employee_id');
+                }
                 $data['employeeData'] = DB::table('employee')->where('employee_id', $employeeId)->first();
                 $data['medicalHistoryData'] = DB::table('medical_history')->where('employee_id', $employeeId)->first();
                 $occupationalRows = DB::table('occupational_history')->where('employee_id', $employeeId)->orderBy('occupHistory_id')->get()->values();
@@ -1152,6 +1494,16 @@ if ($view === 'auth.surveillance_company') {
                     ->orWhereNull('employee_date')
                     ->orWhereNull('doctor_date');
             })->count();
+        } elseif ($view === 'auth.surveillance_usechh1Report') {
+            $employeeId = (int) ($routeArgs[0] ?? request()->route('id') ?? request()->query('employee_id'));
+            $data['employeeData'] = DB::table('employee')->where('employee_id', $employeeId)->first();
+            $data['medicalHistoryData'] = DB::table('medical_history')->where('employee_id', $employeeId)->first();
+            $occupationalRows = DB::table('occupational_history')->where('employee_id', $employeeId)->orderBy('occupHistory_id')->get()->values();
+            $data['occupationalHistoryRows'] = $occupationalRows;
+            $data['currentOccupationalData'] = $occupationalRows->first();
+            $data['pastOccupationalHistoryRows'] = $occupationalRows->slice(1)->values();
+            $data['personalSocialHistoryData'] = DB::table('personal_social_history')->where('employee_id', $employeeId)->first();
+            $data['trainingHistoryData'] = DB::table('training_history')->where('employee_id', $employeeId)->first();
         } elseif (in_array($view, ['auth.surveillance_summaryEmpReport', 'auth.surveillance_fitnessReport', 'auth.surveillance_summaryReport', 'auth.surveillance_removalReport', 'auth.surveillance_abnormalReport'], true)) {
             $data = array_merge($data, $loadCurrentSurveillance(request()));
             if ($view === 'auth.surveillance_summaryEmpReport') {
@@ -1312,7 +1664,7 @@ Route::get('/general_report.php', $render('auth.general_report'))->name('general
 Route::get('/general_examination.php', $render('auth.general_examination'))->name('general.examination');
 
 Route::get('/PDF_company.php', $renderPdf('auth.surveillance_company', 'company.pdf', 'a4', 'landscape'))->name('pdf.company');
-Route::get('/PDF_employee.php', $renderPdf('auth.surveillance_employee', 'employee.pdf', 'a4', 'landscape'))->name('pdf.employee');
+Route::get('/PDF_employee.php', $render('auth.surveillance_usechh1Report'))->name('pdf.employee');
 Route::get('/PDF_USECHH1.php', $renderPdf('auth.surveillance_usechh1Report', 'usechh1.pdf', 'a4', 'portrait'))->name('pdf.usechh1');
 Route::get('/PDF_USECHH2.php', $renderPdf('auth.surveillance_summaryEmpReport', 'usechh2.pdf', 'a4', 'landscape'))->name('pdf.usechh2');
 Route::get('/PDF_USECHH3.php', $renderPdf('auth.surveillance_fitnessReport', 'usechh3.pdf'))->name('pdf.usechh3');
@@ -1368,6 +1720,143 @@ Route::get('/audiometry_examination.php', $render('auth.audiometry_examination')
 Route::get('/audiometry_confirm.php', $render('auth.audiometry_confirm'))->name('audiometry.confirm');
 Route::get('/audiometry_report.php', $render('auth.audiometry_report'))->name('audiometry.report');
 Route::get('/new_questionnaire.php', $render('auth.new_questionnaire'))->name('audiometry.questionnaire.new');
+Route::post('/audiometry/examination/save', function (Request $request) use ($ensureDoctorProfile, $calculateAudiometryAverage, $computeAudiometryStatuses) {
+    $doctor = $ensureDoctorProfile();
+    $employeeId = (int) $request->input('employee_id');
+    $companyId = (int) $request->input('company_id');
+    $audiometryId = (int) $request->input('audiometry_id');
+
+    if ($employeeId <= 0 || $companyId <= 0) {
+        return redirect()->route('audiometry.list')->withErrors(['audiometry' => 'Please choose company and employee first.']);
+    }
+
+    $testPayload = [
+        'audioTest_date' => $request->input('audioTest_date'),
+        'total_years_working' => (int) $request->input('total_years_working', 0),
+        'noYears_working' => (int) $request->input('noYears_working', 0),
+        'audiometer' => (int) $request->input('audiometer', 0),
+        'calibration_date' => $request->input('calibration_date'),
+        'company_id' => $companyId,
+        'employee_id' => $employeeId,
+    ];
+
+    if ($audiometryId > 0 && DB::table('audiometry_test')->where('audiometry_id', $audiometryId)->exists()) {
+        DB::table('audiometry_test')->where('audiometry_id', $audiometryId)->update($testPayload);
+    } else {
+        $audiometryId = (int) DB::table('audiometry_test')->insertGetId($testPayload);
+    }
+
+    $pastMedicalPayload = [
+        'ear_infections' => $request->input('ear_infections') === 'Yes' ? 1 : 0,
+        'head_injury' => $request->input('head_injury') === 'Yes' ? 1 : 0,
+        'ototoxic_drugs' => $request->input('ototoxic_drugs') === 'Yes' ? 1 : 0,
+        'prev_earSurgery' => $request->input('prev_earSurgery') === 'Yes' ? 1 : 0,
+        'pre_noiseExposure' => $request->input('pre_noiseExposure'),
+        'significant_hobbies' => $request->input('significant_hobbies'),
+        'seg' => (int) $request->input('seg', 0),
+        'otoscopy' => $request->input('otoscopy') === 'Normal' ? 1 : 0,
+        'audio_rinneRight' => $request->input('audio_rinneRight'),
+        'audio_rinneLeft' => $request->input('audio_rinneLeft'),
+        'audio_weber' => $request->input('audio_weber'),
+        'type_audiogram' => $request->input('type_audiogram'),
+        'exposure_lex' => (float) $request->input('exposure_lex', 0),
+        'peakExposure_Lpeak' => (float) $request->input('peakExposure_Lpeak', 0),
+        'maxExposure_Lmax' => (float) $request->input('maxExposure_Lmax', 0),
+        'employee_id' => $employeeId,
+        'audiometry_id' => $audiometryId,
+        'company_id' => $companyId,
+    ];
+
+    if (DB::table('audiometry_pastmedical')->where('employee_id', $employeeId)->exists()) {
+        DB::table('audiometry_pastmedical')->where('employee_id', $employeeId)->update($pastMedicalPayload);
+    } else {
+        DB::table('audiometry_pastmedical')->insert($pastMedicalPayload);
+    }
+
+    $mapAudiographPayload = static function (Request $request, string $prefix) use ($employeeId, $companyId, $audiometryId): array {
+        $payload = ['employee_id' => $employeeId, 'company_id' => $companyId, 'audiometry_id' => $audiometryId];
+        foreach (['250', '500', '1k', '2k', '3k', '4k', '6k', '8k'] as $suffix) {
+            $name = str_replace('k', '000', $suffix);
+            $payload['R_'.$suffix] = (int) $request->input($prefix.'_right_'.$name, 0);
+            $payload['L_'.$suffix] = (int) $request->input($prefix.'_left_'.$name, 0);
+            $payload['bone_R'.str_replace('k', 'k', $suffix)] = (int) $request->input($prefix.'_bone_right_'.$name, 0);
+            $payload['bone_L'.str_replace('k', 'k', $suffix)] = (int) $request->input($prefix.'_bone_left_'.$name, 0);
+        }
+
+        $payload['bone_R1k'] = (int) $request->input($prefix.'_bone_right_1000', 0);
+        $payload['bone_R2k'] = (int) $request->input($prefix.'_bone_right_2000', 0);
+        $payload['bone_R3k'] = (int) $request->input($prefix.'_bone_right_3000', 0);
+        $payload['bone_R4k'] = (int) $request->input($prefix.'_bone_right_4000', 0);
+        $payload['bone_R6k'] = (int) $request->input($prefix.'_bone_right_6000', 0);
+        $payload['bone_R8k'] = (int) $request->input($prefix.'_bone_right_8000', 0);
+        $payload['bone_L1k'] = (int) $request->input($prefix.'_bone_left_1000', 0);
+        $payload['bone_L2k'] = (int) $request->input($prefix.'_bone_left_2000', 0);
+        $payload['bone_L3k'] = (int) $request->input($prefix.'_bone_left_3000', 0);
+        $payload['bone_L4k'] = (int) $request->input($prefix.'_bone_left_4000', 0);
+        $payload['bone_L6k'] = (int) $request->input($prefix.'_bone_left_6000', 0);
+        $payload['bone_L8k'] = (int) $request->input($prefix.'_bone_left_8000', 0);
+
+        return $payload;
+    };
+
+    $baselinePayload = $mapAudiographPayload($request, 'baseline');
+    if (DB::table('baseline_audiograph')->where('audiometry_id', $audiometryId)->exists()) {
+        DB::table('baseline_audiograph')->where('audiometry_id', $audiometryId)->update($baselinePayload);
+        $baselineRowId = (int) DB::table('baseline_audiograph')->where('audiometry_id', $audiometryId)->value('baselineAudio_id');
+    } else {
+        $baselineRowId = (int) DB::table('baseline_audiograph')->insertGetId($baselinePayload);
+    }
+
+    $annualPayload = $mapAudiographPayload($request, 'annual');
+    $annualPayload['baselineAudio_id'] = $baselineRowId;
+    if (DB::table('annual_audiograph')->where('audiometry_id', $audiometryId)->exists()) {
+        DB::table('annual_audiograph')->where('audiometry_id', $audiometryId)->update($annualPayload);
+        $annualRowId = (int) DB::table('annual_audiograph')->where('audiometry_id', $audiometryId)->value('annualAudio_id');
+    } else {
+        $annualRowId = (int) DB::table('annual_audiograph')->insertGetId($annualPayload);
+    }
+
+    $baselineRow = DB::table('baseline_audiograph')->where('baselineAudio_id', $baselineRowId)->first();
+    $annualRow = DB::table('annual_audiograph')->where('annualAudio_id', $annualRowId)->first();
+    $average1Right = $calculateAudiometryAverage($annualRow, 'RIGHT', ['2000', '3000', '4000']);
+    $average2Right = $calculateAudiometryAverage($annualRow, 'RIGHT', ['500', '1000', '2000', '3000']);
+    $average1Left = $calculateAudiometryAverage($annualRow, 'LEFT', ['2000', '3000', '4000']);
+    $average2Left = $calculateAudiometryAverage($annualRow, 'LEFT', ['500', '1000', '2000', '3000']);
+    $baselineAverageRight = $calculateAudiometryAverage($baselineRow, 'RIGHT', ['500', '1000', '2000', '3000']);
+    $baselineAverageLeft = $calculateAudiometryAverage($baselineRow, 'LEFT', ['500', '1000', '2000', '3000']);
+
+    $commentPayload = [
+        'STS_right' => (($average2Right > 0 && $baselineAverageRight > 0 && (($average2Right - $baselineAverageRight) >= 10)) ? 'Yes' : 'No'),
+        'STS_left' => (($average2Left > 0 && $baselineAverageLeft > 0 && (($average2Left - $baselineAverageLeft) >= 10)) ? 'Yes' : 'No'),
+        'average1_right' => $average1Right,
+        'average2_right' => $average2Right,
+        'average1_left' => $average1Left,
+        'average2_left' => $average2Left,
+        'standard_analysis' => $request->input('standard_analysis'),
+        'audio_recommendation' => $request->input('audio_recommendation'),
+        'remarks' => $request->input('remarks'),
+        'employee_id' => $employeeId,
+        'doctor_id' => (int) ($doctor->doctor_id ?? 0),
+        'company_id' => $companyId,
+        'audiometry_id' => $audiometryId,
+        'annualAudio_id' => $annualRowId,
+        'baselineAudio_id' => $baselineRowId,
+    ];
+
+    if (DB::table('audio_comments')->where('audiometry_id', $audiometryId)->exists()) {
+        DB::table('audio_comments')->where('audiometry_id', $audiometryId)->update($commentPayload);
+    } else {
+        DB::table('audio_comments')->insert($commentPayload);
+    }
+
+    $request->session()->put('current_audiometry_id', $audiometryId);
+
+    return redirect()->route('audiometry.report', [
+        'company_id' => $companyId,
+        'employee_id' => $employeeId,
+        'audiometry_id' => $audiometryId,
+    ])->with('status', 'Audiometry examination saved successfully.');
+})->name('audiometry.examination.save');
 
 Route::get('/new_company.php', $render('auth.new_company'))->name('company.new');
 Route::get('/new_employee.php', $render('auth.new_employee'))->name('employee.new');
@@ -1441,21 +1930,29 @@ $flashBack = static function (string $message) {
     };
 };
 
-Route::post('/login', function (Request $request) {
+Route::post('/login', function (Request $request) use ($passwordMatches) {
     $credentials = $request->validate([
         'username' => ['required', 'string'],
         'password' => ['required', 'string'],
     ]);
 
-    if (Auth::attempt($credentials)) {
-        $request->session()->regenerate();
+    $user = \App\Models\User::query()->where('username', $credentials['username'])->first();
 
-        return redirect()->intended(route('dashboard'));
+    if (! $user || ! $passwordMatches($credentials['password'], (string) $user->password)) {
+        return redirect()->route('login')
+            ->withErrors(['auth' => 'Invalid username or password.'])
+            ->withInput($request->only('username'));
     }
 
-    return redirect()->route('login')
-        ->withErrors(['auth' => 'Invalid username or password.'])
-        ->withInput($request->only('username'));
+    if (hash_equals((string) $user->password, $credentials['password'])) {
+        $user->password = Hash::make($credentials['password']);
+        $user->save();
+    }
+
+    Auth::login($user);
+    $request->session()->regenerate();
+
+    return redirect()->intended(route('dashboard'));
 })->name('login.store');
 Route::post('/forgot-password', $flashBack('Password reset request submitted.'))->name('password.email');
 Route::post('/logout', function (Request $request) {
@@ -1485,7 +1982,7 @@ Route::post('/account/profile-photo/upload', function (Request $request) use ($s
 Route::post('/account/profile-photo/delete', function () use ($deleteUserAsset) {
     return $deleteUserAsset('profile_photo_path', 'Profile photo deleted.');
 })->name('account.profile-photo.delete');
-Route::post('/account/password/update', function (Request $request) use ($resolveSettingsUser) {
+Route::post('/account/password/update', function (Request $request) use ($resolveSettingsUser, $passwordMatches) {
     $user = $resolveSettingsUser();
     if (! $user) {
         return redirect()->route('login')->withErrors(['auth' => 'Please log in first.']);
@@ -1497,7 +1994,7 @@ Route::post('/account/password/update', function (Request $request) use ($resolv
         'new_password_confirmation' => ['required', 'string', 'min:6'],
     ]);
 
-    if (! Hash::check($validated['current_password'], $user->password)) {
+    if (! $passwordMatches($validated['current_password'], (string) $user->password)) {
         return redirect()->back()->withErrors(['current_password' => 'Current password is incorrect.'])->withInput();
     }
 

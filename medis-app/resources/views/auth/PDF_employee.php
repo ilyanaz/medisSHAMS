@@ -2,7 +2,12 @@
 require __DIR__ . '/navigation.php';
 
 $esc = static fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
-$sourceUrl = function_exists('route') ? route('surveillance.employee') : 'surveillance_employee.php';
+$employee = $employeeData ?? (object) [];
+$workerName = trim((string) (($employee->employee_firstName ?? '') . ' ' . ($employee->employee_lastName ?? '')));
+$identityNo = trim((string) (($employee->employee_NRIC ?? '') !== '' ? ($employee->employee_NRIC ?? '') : ($employee->employee_passportNo ?? '')));
+$sourceUrl = function_exists('route')
+    ? route('surveillance.report.usechh1', ['employee_id' => $employee->employee_id ?? request()->query('employee_id')])
+    : 'surveillance_usechh1Report.php?employee_id=' . urlencode((string) ($employee->employee_id ?? request()->query('employee_id')));
 $backUrl = function_exists('route') ? route('general.report') : 'general_report.php';
 
 medis_render_navigation_start([
@@ -26,7 +31,7 @@ medis_render_navigation_start([
 <div class="pdf-page">
     <section class="page-head">
         <h2>PDF Employee</h2>
-        <p>Preview the employee record page in a print-friendly PDF wrapper.</p>
+        <p>Preview the employee USECHH 1 report before printing.</p>
     </section>
 
     <section class="preview-shell">
@@ -36,12 +41,12 @@ medis_render_navigation_start([
                 <strong>Employee</strong>
             </div>
             <div class="meta-box">
-                <span>Preview Source</span>
-                <strong>Surveillance Employee</strong>
+                <span>Employee Name</span>
+                <strong><?php echo $esc($workerName !== '' ? $workerName : 'Not set'); ?></strong>
             </div>
             <div class="meta-box">
-                <span>Mode</span>
-                <strong>Print Page</strong>
+                <span>NRIC / Passport</span>
+                <strong><?php echo $esc($identityNo !== '' ? $identityNo : 'Not set'); ?></strong>
             </div>
         </div>
 
@@ -49,16 +54,15 @@ medis_render_navigation_start([
             <div class="preview-frame-head">
                 <div>
                     <h3>Preview</h3>
-                    <p>Open the print page and print the document directly from here.</p>
+                    <p>Review the employee USECHH 1 report and print it from this page.</p>
                 </div>
                 <div class="preview-actions">
                     <a class="btn" href="<?php echo $esc($backUrl); ?>">Back</a>
-                    
                     <button class="next" type="button" onclick="window.frames['pdfPreviewFrame'].print()">Print</button>
                 </div>
             </div>
             <iframe class="preview-iframe" name="pdfPreviewFrame" src="<?php echo $esc($sourceUrl); ?>" title="PDF Employee preview"></iframe>
-            <div class="notice">Use the Print button to print this document directly.</div>
+            <div class="notice">Use the Print button to print this employee document directly.</div>
         </section>
     </section>
 </div>

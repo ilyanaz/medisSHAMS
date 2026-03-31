@@ -19,6 +19,7 @@
 </head>
 <body>
 <?php
+require_once __DIR__ . '/view_bootstrap.php';
 $esc = static fn ($value) => htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 $backUrl = function_exists('route') ? route('surveillance.list') : '#';
 $record = isset($declarationData) && $declarationData ? $declarationData : (object) [];
@@ -27,3 +28,4 @@ $employeeName = trim(((string) ($record->employee_firstName ?? '')) . ' ' . ((st
 <div class="overlay"><form class="modal" method="post" action="<?php echo $esc(route('surveillance.record.destroy')); ?>"><input type="hidden" name="_token" value="<?php echo $esc(csrf_token()); ?>"><input type="hidden" name="declaration_id" value="<?php echo $esc($record->declaration_id ?? ''); ?>"><h1>Delete Surveillance Record</h1><p class="muted">Confirm deletion for the selected declaration record.</p><div class="alert">This action cannot be undone. Please confirm before continuing.</div><div class="box"><div><strong>Record ID:</strong> #SUR<?php echo $esc($record->declaration_id ?? ''); ?></div><div><strong>Employee:</strong> <?php echo $esc($employeeName !== '' ? $employeeName : 'Not set'); ?></div><div><strong>Company:</strong> <?php echo $esc($record->company_name ?? 'Not set'); ?></div><div><strong>Employee Date:</strong> <?php echo $esc($record->employee_date ?? '-'); ?></div><div><strong>Doctor Date:</strong> <?php echo $esc($record->doctor_date ?? '-'); ?></div></div><div class="actions"><a class="btn" href="<?php echo $esc($backUrl); ?>">Cancel</a><button class="btn primary" type="submit">Delete Record</button></div></form></div>
 </body>
 </html>
+

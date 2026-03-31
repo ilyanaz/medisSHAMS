@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/view_bootstrap.php';
+
 if (! function_exists('medis_nav_icon')) {
     function medis_nav_icon(string $name): string
     {
@@ -98,7 +100,7 @@ if (! function_exists('medis_render_navigation_start')) {
     .app-shell{height:100vh;display:grid;grid-template-columns:228px 1fr;overflow:hidden}
     .app-shell.is-collapsed{grid-template-columns:84px 1fr}
     .app-sidebar{height:100vh;overflow:hidden;background:var(--panel-2);border-right:1px solid var(--line);padding:12px 8px 12px 10px;display:flex;flex-direction:column;gap:8px}
-    .app-brand-row{display:flex;align-items:flex-start;justify-content:space-between;gap:6px;padding:2px 4px 6px}
+    .app-brand-row{display:flex;align-items:flex-start;gap:6px;padding:2px 4px 2px}
     .app-brand{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
     .app-brand-logo{width:34px;height:34px;border-radius:10px;background:var(--panel);border:1px solid var(--line);display:inline-flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
     .app-brand-logo img{width:100%;height:100%;object-fit:contain;padding:2px}
@@ -106,10 +108,10 @@ if (! function_exists('medis_render_navigation_start')) {
     .app-brand-text strong{font-size:.9rem;line-height:1.1}
     .app-brand-text span{font-size:.68rem;color:#64748b}
     body[data-theme="dark"] .app-brand-text span{color:#8aa0bf}
-    .app-toggle{width:30px;height:30px;border:1px solid var(--line);border-radius:10px;background:var(--panel);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+    .app-toggle-row{display:flex;justify-content:center;padding:0 6px 4px}
+    .app-toggle{width:24px;height:24px;border:0;border-radius:0;background:transparent;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;padding:0}
     .app-toggle svg,.app-nav-link svg,.app-top-action svg,.app-user-menu-link svg,.switch-btn svg{width:18px;height:18px;stroke:#475569;fill:none;stroke-width:1.85;stroke-linecap:round;stroke-linejoin:round}
-    .app-toggle{width:36px;height:36px;border-radius:12px}
-    .app-toggle .sidebar-toggle-icon{width:22px;height:22px}
+    .app-toggle .sidebar-toggle-icon{width:18px;height:18px}
     .app-toggle .toggle-chevron{transition:transform .18s ease;transform-origin:50% 50%}
     .app-shell.is-collapsed .app-toggle .toggle-chevron{transform:scaleX(-1)}
     body[data-theme="dark"] .app-toggle svg,body[data-theme="dark"] .app-nav-link svg,body[data-theme="dark"] .app-top-action svg,body[data-theme="dark"] .app-user-menu-link svg,body[data-theme="dark"] .switch-btn svg{stroke:#cbd5e1}
@@ -119,7 +121,8 @@ if (! function_exists('medis_render_navigation_start')) {
     .app-nav-link:hover{background:rgba(148,163,184,.08)}
     .app-nav-link.active{background:#eef4f0;border-color:#dbe8df;font-weight:700;color:#14321f}
     body[data-theme="dark"] .app-nav-link.active{background:rgba(56,155,91,.16);border-color:rgba(73,169,106,.26);color:#d8f4e1}
-    .app-nav-link .icon{width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+    .app-nav-link .icon{width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+    .app-nav-link .icon svg{width:18px;height:18px}
     .app-nav-link .label{display:inline-flex;align-items:center}
     .app-sidebar-tools{display:grid;gap:10px;margin-top:8px}
     .switch-card{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:10px}
@@ -163,6 +166,7 @@ if (! function_exists('medis_render_navigation_start')) {
     .app-shell.is-collapsed .app-avatar{width:26px;height:26px}
     .app-shell.is-collapsed .app-brand-logo{width:44px;height:44px;border-radius:14px}
     .app-shell.is-collapsed .app-user-menu{left:78px;bottom:0}
+    .app-shell.is-collapsed .app-toggle-row{justify-content:center;padding:2px 0 6px}
     @media (max-width:1100px){.app-shell{grid-template-columns:1fr}.app-sidebar{display:none}.app-page{padding:16px}.app-topbar{padding:14px 16px}}
 </style>
 <div class="app-shell" id="appShell">
@@ -172,6 +176,8 @@ if (! function_exists('medis_render_navigation_start')) {
                 <span class="app-brand-logo"><img src="<?php echo $esc($systemLogoUrl); ?>" alt="Medis Logo"></span>
                 <div class="app-brand-text"><strong><?php echo $esc($clinicName); ?></strong><span data-i18n="clinic_management">Clinic Management</span></div>
             </div>
+        </div>
+        <div class="app-toggle-row">
             <button class="app-toggle" id="appNavToggle" type="button" aria-label="Toggle navigation"><?php echo medis_nav_icon('sidebar_toggle'); ?></button>
         </div>
 

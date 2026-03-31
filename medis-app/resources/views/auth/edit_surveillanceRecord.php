@@ -23,6 +23,7 @@
 </head>
 <body>
 <?php
+require_once __DIR__ . '/view_bootstrap.php';
 $esc = static fn ($value) => htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 $backUrl = function_exists('route') ? route('surveillance.list') : '#';
 $record = isset($declarationData) && $declarationData ? $declarationData : (object) [];
@@ -31,3 +32,4 @@ $record = isset($declarationData) && $declarationData ? $declarationData : (obje
 <script>(function(){const form=document.getElementById('editRecordForm');form.addEventListener('submit',function(event){if(!form.checkValidity()){event.preventDefault();form.reportValidity();}});})();</script>
 </body>
 </html>
+

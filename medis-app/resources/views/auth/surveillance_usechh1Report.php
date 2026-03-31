@@ -20,6 +20,18 @@ $personalSocialHistory = $personalSocialHistoryData ?? (object) [];
 $trainingHistory = $trainingHistoryData ?? (object) [];
 $workerName = trim((string) (($employee->employee_firstName ?? '') . ' ' . ($employee->employee_lastName ?? '')));
 $identityNo = $employee->employee_NRIC ?? ($employee->employee_passportNo ?? '');
+$showValue = static function ($value): string {
+    $value = trim((string) ($value ?? ''));
+    return $value !== '' ? $value : '-';
+};
+$addressParts = array_values(array_filter([
+    trim((string) ($employee->employee_address ?? '')),
+    trim((string) ($employee->employee_postcode ?? '')),
+    trim((string) ($employee->employee_district ?? '')),
+    trim((string) ($employee->employee_state ?? '')),
+], static fn ($value) => $value !== ''));
+$fullAddress = $addressParts !== [] ? implode(', ', $addressParts) : '-';
+$isUsechh1Pdf = $pdfMode;
 medis_render_navigation_start([
     'clinicName' => $clinicName ?? 'Medis SHAMS',
     'clinicLogoUrl' => $clinicLogoUrl ?? null,
@@ -30,17 +42,38 @@ medis_render_navigation_start([
 ?>
 <style>
 .report-page{width:100%;max-width:none;margin:0;color:#0f172a;font-family:"Poppins","Segoe UI",Tahoma,Geneva,Verdana,sans-serif}
-.sheet{padding:24px 26px;border:1px solid #e5e7eb;border-radius:20px;background:#fff;box-shadow:0 10px 30px rgba(15,23,42,.04)}
+.sheet{padding:16px 18px;background:#fff}
 .report-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
 .report-btn{display:inline-flex;align-items:center;gap:8px;text-decoration:none;border:1px solid #d1d5db;border-radius:10px;padding:8px 14px;background:#fff;color:#374151;font-size:14px;font-weight:500;cursor:pointer}
 .report-btn.primary{background:#389B5B;border-color:#389B5B;color:#fff}
 .sheet-top{position:relative;display:block;text-align:center;margin-bottom:10px}
-.center-title{display:block;width:100%;text-align:center;font-size:13px;font-weight:700;line-height:1.55;color:#0f172a}
-.right-code{position:absolute;right:0;top:0;font-size:13px;font-weight:700;line-height:1.55;color:#0f172a}
-.sheet-title{text-align:center;margin-bottom:18px}.sheet-title .line{font-size:13px;font-weight:700;line-height:1.5}.sheet-title .main{font-size:16px;font-weight:700;line-height:1.5;margin-top:10px}
-.info-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:18px}.info-card{border:1px solid #e5e7eb;border-radius:16px;padding:14px;background:#fff}.info-card h3{margin:0 0 12px;font-size:1rem}.line-list{display:grid;gap:10px}.line-row{display:grid;grid-template-columns:190px 1fr;gap:12px;align-items:start}.line-label{font-size:13px;font-weight:600;color:#334155}.line-value{font-size:13px;line-height:1.6;color:#0f172a;min-height:20px;padding-bottom:4px;border-bottom:1px solid #e5e7eb}.full{grid-column:1/-1}.table-wrap{border:1px solid #e5e7eb;border-radius:16px;overflow:hidden;background:#fff}.history-table{width:100%;border-collapse:collapse}.history-table th,.history-table td{padding:12px 14px;border-top:1px solid #e5e7eb;vertical-align:top;text-align:left;font-size:13px}.history-table thead th{border-top:none;background:#f8fafc;font-weight:700;color:#334155}.history-table tbody th{background:#f8fafc;font-weight:600;color:#111827;width:260px}.section-block{margin-top:18px}.section-block h3{margin:0 0 12px;font-size:1rem}.toolbar-hide .app-card{padding:0;border:0;background:transparent;box-shadow:none}.toolbar-hide .app-page{padding:18px;background:#f3f6f8}
-@media(max-width:860px){.info-grid{grid-template-columns:1fr}.line-row{grid-template-columns:1fr}.history-table,.history-table thead,.history-table tbody,.history-table tr,.history-table th,.history-table td{display:block;width:100%}.history-table thead{display:none}.history-table tbody th{width:100%}}
-@media print{body{background:#fff}.app-topbar,.app-sidebar,.report-actions{display:none!important}.app-shell{display:block}.app-main,.app-page,.app-card{display:block;height:auto;overflow:visible;padding:0!important;border:0!important;background:#fff!important}.sheet{padding:0;box-shadow:none;border:0}}
+.center-title{display:block;width:100%;text-align:center;font-size:12px;font-weight:700;line-height:1.45;color:#0f172a}
+.right-code{position:absolute;right:0;top:0;font-size:12px;font-weight:700;line-height:1.45;color:#0f172a}
+.sheet-title{text-align:center;margin-bottom:18px}
+.sheet-title .line{font-size:12px;font-weight:700;line-height:1.45}
+.sheet-title .main{font-size:15px;font-weight:700;line-height:1.45;margin-top:8px}
+.document-table{width:100%;border-collapse:collapse;margin-bottom:16px;table-layout:fixed}
+.document-table th,.document-table td{border:1px solid #c9d8ea;padding:8px 10px;font-size:11.5px;vertical-align:top;text-align:left;word-wrap:break-word}
+.document-table th{font-weight:700;color:#0f172a;background:#fff}
+.document-table .label-cell{width:21%;font-weight:700;background:#fff}
+.document-table .value-cell{width:29%}
+.document-table .wide-label{width:18%}
+.document-table .wide-value{width:32%}
+.document-table.employee-details th,
+.document-table.employee-details td{border:none;padding-left:0;padding-right:16px}
+.section-block{margin-top:22px}
+.section-heading{display:flex;align-items:center;gap:14px;margin:0 0 14px}
+.section-heading::after{content:"";flex:1;height:1px;background:#c9d8ea}
+.section-heading span{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+.text-block{min-height:28px;line-height:1.6;white-space:pre-wrap}
+.subtle{color:#475569}
+.occupational-table th,.occupational-table td{text-align:left}
+.occupational-table thead th{background:#fff}
+.training-table thead th{background:#fff}
+.pdf-page-break{page-break-before:always;break-before:page}
+.toolbar-hide .app-card{padding:0;border:0;background:transparent;box-shadow:none}
+.toolbar-hide .app-page{padding:18px;background:#f3f6f8}
+@media print{body{background:#fff}.app-topbar,.app-sidebar,.report-actions{display:none!important}.app-shell{display:block}.app-main,.app-page,.app-card{display:block;height:auto;overflow:visible;padding:0!important;border:0!important;background:#fff!important}.sheet{padding:0;border:0;box-shadow:none}}
 </style>
 <div class="report-page toolbar-hide">
     <section class="sheet">
@@ -53,109 +86,149 @@ medis_render_navigation_start([
             <div class="main">EMPLOYEE DETAILS</div>
         </div>
 
-        <div class="info-grid">
-            <div class="info-card">
-                <h3>Employee Details</h3>
-                <div class="line-list">
-                    <div class="line-row"><span class="line-label">Name</span><span class="line-value"><?php echo $esc($workerName); ?></span></div>
-                    <div class="line-row"><span class="line-label">NRIC / Passport</span><span class="line-value"><?php echo $esc($identityNo); ?></span></div>
-                    <div class="line-row"><span class="line-label">Date of Birth</span><span class="line-value"><?php echo $esc($employee->employee_DOB ?? ''); ?></span></div>
-                    <div class="line-row"><span class="line-label">Gender</span><span class="line-value"><?php echo $esc($employee->employee_gender ?? ''); ?></span></div>
-                    <div class="line-row full"><span class="line-label">Address</span><span class="line-value"><?php echo $esc($employee->employee_address ?? ''); ?></span></div>
-                    <div class="line-row"><span class="line-label">Telephone</span><span class="line-value"><?php echo $esc($employee->employee_telephone ?? ''); ?></span></div>
-                    <div class="line-row"><span class="line-label">Email</span><span class="line-value"><?php echo $esc($employee->employee_email ?? ''); ?></span></div>
-                </div>
-            </div>
-            <div class="info-card">
-                <h3>Personal Profile</h3>
-                <div class="line-list">
-                    <div class="line-row"><span class="line-label">Ethnicity</span><span class="line-value"><?php echo $esc($employee->employee_ethnicity ?? ''); ?></span></div>
-                    <div class="line-row"><span class="line-label">Citizenship</span><span class="line-value"><?php echo $esc($employee->employee_citizenship ?? ''); ?></span></div>
-                    <div class="line-row"><span class="line-label">Marital Status</span><span class="line-value"><?php echo $esc($employee->employee_martialStatus ?? ''); ?></span></div>
-                    <div class="line-row"><span class="line-label">No. of Children</span><span class="line-value"><?php echo $esc($employee->no_of_children ?? ''); ?></span></div>
-                    <div class="line-row"><span class="line-label">Years Married</span><span class="line-value"><?php echo $esc($employee->years_married ?? ''); ?></span></div>
-                </div>
-            </div>
+        <div class="section-block">
+            <?php if (!$pdfMode): ?>
+            <div class="section-heading"><span>Employee Details</span></div>
+            <?php endif; ?>
+            <table class="document-table employee-details">
+                <tbody>
+                    <tr>
+                        <td class="label-cell">Name</td>
+                        <td class="value-cell"><?php echo $esc($showValue($workerName)); ?></td>
+                        <td class="label-cell">NRIC / Passport</td>
+                        <td class="value-cell"><?php echo $esc($showValue($identityNo)); ?></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Date of Birth</td>
+                        <td class="value-cell"><?php echo $esc($showValue($employee->employee_DOB ?? null)); ?></td>
+                        <td class="label-cell">Gender</td>
+                        <td class="value-cell"><?php echo $esc($showValue($employee->employee_gender ?? null)); ?></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Telephone</td>
+                        <td class="value-cell"><?php echo $esc($showValue($employee->employee_telephone ?? null)); ?></td>
+                        <td class="label-cell">Email</td>
+                        <td class="value-cell"><?php echo $esc($showValue($employee->employee_email ?? null)); ?></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Address</td>
+                        <td colspan="3"><?php echo $esc($fullAddress); ?></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Ethnicity</td>
+                        <td class="value-cell"><?php echo $esc($showValue($employee->employee_ethnicity ?? null)); ?></td>
+                        <td class="label-cell">Citizenship</td>
+                        <td class="value-cell"><?php echo $esc($showValue($employee->employee_citizenship ?? null)); ?></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Marital Status</td>
+                        <td class="value-cell"><?php echo $esc($showValue($employee->employee_martialStatus ?? null)); ?></td>
+                        <td class="label-cell">No. of Children</td>
+                        <td class="value-cell"><?php echo $esc($showValue($employee->no_of_children ?? null)); ?></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Years Married</td>
+                        <td class="value-cell"><?php echo $esc($showValue($employee->years_married ?? null)); ?></td>
+                        <td class="label-cell">&nbsp;</td>
+                        <td class="value-cell">&nbsp;</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
 
         <div class="section-block">
-            <h3>Medical History</h3>
-            <div class="table-wrap">
-                <table class="history-table">
-                    <tbody>
-                        <tr><th>Diagnosed History</th><td><?php echo nl2br($esc($medicalHistory->diagnosed_history ?? '')); ?></td></tr>
-                        <tr><th>Medication History</th><td><?php echo nl2br($esc($medicalHistory->medication_history ?? '')); ?></td></tr>
-                        <tr><th>Admitted History</th><td><?php echo nl2br($esc($medicalHistory->admitted_history ?? '')); ?></td></tr>
-                        <tr><th>Family History</th><td><?php echo nl2br($esc($medicalHistory->family_history ?? '')); ?></td></tr>
-                        <tr><th>Other History</th><td><?php echo nl2br($esc($medicalHistory->others_history ?? '')); ?></td></tr>
-                    </tbody>
-                </table>
-            </div>
+            <div class="section-heading"><span>Medical History</span></div>
+            <table class="document-table">
+                <tbody>
+                    <tr><td class="label-cell">Diagnosed History</td><td colspan="3" class="text-block"><?php echo nl2br($esc($showValue($medicalHistory->diagnosed_history ?? null))); ?></td></tr>
+                    <tr><td class="label-cell">Medication History</td><td colspan="3" class="text-block"><?php echo nl2br($esc($showValue($medicalHistory->medication_history ?? null))); ?></td></tr>
+                    <tr><td class="label-cell">Admitted History</td><td colspan="3" class="text-block"><?php echo nl2br($esc($showValue($medicalHistory->admitted_history ?? null))); ?></td></tr>
+                    <tr><td class="label-cell">Family History</td><td colspan="3" class="text-block"><?php echo nl2br($esc($showValue($medicalHistory->family_history ?? null))); ?></td></tr>
+                    <tr><td class="label-cell">Other History</td><td colspan="3" class="text-block"><?php echo nl2br($esc($showValue($medicalHistory->others_history ?? null))); ?></td></tr>
+                </tbody>
+            </table>
         </div>
 
         <div class="section-block">
-            <h3>Occupational &amp; Company History</h3>
-            <div class="table-wrap">
-                <table class="history-table">
-                    <thead>
-                        <tr><th>Record</th><th>Job Title</th><th>Company Name</th><th>Employment Duration</th><th>Chemical Exposure Duration</th><th>Chemical Exposure Incidents</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <th>Current Company</th>
-                            <td><?php echo $esc($currentOccupational->job_title ?? ''); ?></td>
-                            <td><?php echo $esc($currentOccupational->company_name ?? ''); ?></td>
-                            <td><?php echo $esc($currentOccupational->employment_duration ?? ''); ?></td>
-                            <td><?php echo $esc($currentOccupational->chemical_exposure_duration ?? ''); ?></td>
-                            <td><?php echo nl2br($esc($currentOccupational->chemical_exposure_incidents ?? '')); ?></td>
-                        </tr>
-                        <?php foreach ($pastOccupationalRows as $index => $row): ?>
-                        <tr>
-                            <th><?php echo $esc('Past Company ' . ($index + 1)); ?></th>
-                            <td><?php echo $esc($row->job_title ?? ''); ?></td>
-                            <td><?php echo $esc($row->company_name ?? ''); ?></td>
-                            <td><?php echo $esc($row->employment_duration ?? ''); ?></td>
-                            <td><?php echo $esc($row->chemical_exposure_duration ?? ''); ?></td>
-                            <td><?php echo nl2br($esc($row->chemical_exposure_incidents ?? '')); ?></td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
+            <div class="section-heading"><span>Occupational and Company History</span></div>
+            <table class="document-table occupational-table">
+                <thead>
+                    <tr>
+                        <th style="width:14%;">Record</th>
+                        <th style="width:16%;">Job Title</th>
+                        <th style="width:18%;">Company Name</th>
+                        <th style="width:16%;">Employment Duration</th>
+                        <th style="width:16%;">Chemical Exposure Duration</th>
+                        <th style="width:20%;">Chemical Exposure Incidents</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Current Company</strong></td>
+                        <td><?php echo $esc($showValue($currentOccupational->job_title ?? null)); ?></td>
+                        <td><?php echo $esc($showValue($currentOccupational->company_name ?? null)); ?></td>
+                        <td><?php echo $esc($showValue($currentOccupational->employment_duration ?? null)); ?></td>
+                        <td><?php echo $esc($showValue($currentOccupational->chemical_exposure_duration ?? null)); ?></td>
+                        <td class="text-block"><?php echo nl2br($esc($showValue($currentOccupational->chemical_exposure_incidents ?? null))); ?></td>
+                    </tr>
+                    <?php foreach ($pastOccupationalRows as $index => $row): ?>
+                    <tr>
+                        <td><strong><?php echo $esc('Past Company ' . ($index + 1)); ?></strong></td>
+                        <td><?php echo $esc($showValue($row->job_title ?? null)); ?></td>
+                        <td><?php echo $esc($showValue($row->company_name ?? null)); ?></td>
+                        <td><?php echo $esc($showValue($row->employment_duration ?? null)); ?></td>
+                        <td><?php echo $esc($showValue($row->chemical_exposure_duration ?? null)); ?></td>
+                        <td class="text-block"><?php echo nl2br($esc($showValue($row->chemical_exposure_incidents ?? null))); ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
         </div>
 
         <div class="section-block">
-            <h3>Personal &amp; Social History</h3>
-            <div class="table-wrap">
-                <table class="history-table">
-                    <tbody>
-                        <tr><th>Smoking History</th><td><?php echo $esc($personalSocialHistory->smoking_history ?? ''); ?></td></tr>
-                        <tr><th>Years of Smoking</th><td><?php echo $esc($personalSocialHistory->years_of_smoking ?? ''); ?></td></tr>
-                        <tr><th>No. of Cigarettes</th><td><?php echo $esc($personalSocialHistory->no_of_cigarettes ?? ''); ?></td></tr>
-                        <tr><th>Vaping History</th><td><?php echo $esc($personalSocialHistory->vaping_history ?? ''); ?></td></tr>
-                        <tr><th>Years of Vaping</th><td><?php echo $esc($personalSocialHistory->years_of_vaping ?? ''); ?></td></tr>
-                        <tr><th>Hobby</th><td><?php echo nl2br($esc($personalSocialHistory->hobby ?? '')); ?></td></tr>
-                    </tbody>
-                </table>
-            </div>
+            <div class="section-heading"><span>Personal and Social History</span></div>
+            <table class="document-table">
+                <tbody>
+                    <tr>
+                        <td class="label-cell">Smoking History</td>
+                        <td class="value-cell"><?php echo $esc($showValue($personalSocialHistory->smoking_history ?? null)); ?></td>
+                        <td class="label-cell">Vaping History</td>
+                        <td class="value-cell"><?php echo $esc($showValue($personalSocialHistory->vaping_history ?? null)); ?></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">No. of Cigarettes</td>
+                        <td class="value-cell"><?php echo $esc($showValue($personalSocialHistory->no_of_cigarettes ?? null)); ?></td>
+                        <td class="label-cell">Years of Vaping</td>
+                        <td class="value-cell"><?php echo $esc($showValue($personalSocialHistory->years_of_vaping ?? null)); ?></td>
+                    </tr>
+                    <tr>
+                        <td class="label-cell">Years of Smoking</td>
+                        <td class="value-cell"><?php echo $esc($showValue($personalSocialHistory->years_of_smoking ?? null)); ?></td>
+                        <td class="label-cell">Hobby</td>
+                        <td class="value-cell"><?php echo $esc($showValue($personalSocialHistory->hobby ?? null)); ?></td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
 
-        <div class="section-block">
-            <h3>Training History</h3>
-            <div class="table-wrap">
-                <table class="history-table">
-                    <thead>
-                        <tr><th>Training Item</th><th>Answer</th><th>Comments</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr><th>Handling of Chemical</th><td><?php echo $esc($trainingHistory->handling_of_chemical ?? ''); ?></td><td><?php echo nl2br($esc($trainingHistory->chemical_comments ?? '')); ?></td></tr>
-                        <tr><th>Sign &amp; Symptoms Knowledge</th><td><?php echo $esc($trainingHistory->sign_symptoms ?? ''); ?></td><td><?php echo nl2br($esc($trainingHistory->sign_comments ?? '')); ?></td></tr>
-                        <tr><th>Chemical Poisoning Knowledge</th><td><?php echo $esc($trainingHistory->chemical_poisoning ?? ''); ?></td><td><?php echo nl2br($esc($trainingHistory->poisoning_comments ?? '')); ?></td></tr>
-                        <tr><th>Proper PPE Knowledge</th><td><?php echo $esc($trainingHistory->proper_PPE ?? ''); ?></td><td><?php echo nl2br($esc($trainingHistory->proper_comments ?? '')); ?></td></tr>
-                        <tr><th>PPE Usage</th><td><?php echo $esc($trainingHistory->PPE_usage ?? ''); ?></td><td><?php echo nl2br($esc($trainingHistory->usage_comments ?? '')); ?></td></tr>
-                    </tbody>
-                </table>
-            </div>
+        <div class="section-block<?php echo $isUsechh1Pdf ? ' pdf-page-break' : ''; ?>">
+            <div class="section-heading"><span>Training History</span></div>
+            <table class="document-table training-table">
+                <thead>
+                    <tr>
+                        <th style="width:34%;">Training Item</th>
+                        <th style="width:16%;"><?php echo $isUsechh1Pdf ? '&nbsp;' : 'Answer'; ?></th>
+                        <th style="width:50%;">Comments</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><strong>Handling of Chemical</strong></td><td><?php echo $esc($showValue($trainingHistory->handling_of_chemical ?? null)); ?></td><td class="text-block"><?php echo nl2br($esc($showValue($trainingHistory->chemical_comments ?? null))); ?></td></tr>
+                    <tr><td><strong>Sign and Symptoms Knowledge</strong></td><td><?php echo $esc($showValue($trainingHistory->sign_symptoms ?? null)); ?></td><td class="text-block"><?php echo nl2br($esc($showValue($trainingHistory->sign_comments ?? null))); ?></td></tr>
+                    <tr><td><strong>Chemical Poisoning Knowledge</strong></td><td><?php echo $esc($showValue($trainingHistory->chemical_poisoning ?? null)); ?></td><td class="text-block"><?php echo nl2br($esc($showValue($trainingHistory->poisoning_comments ?? null))); ?></td></tr>
+                    <tr><td><strong>Proper PPE Knowledge</strong></td><td><?php echo $esc($showValue($trainingHistory->proper_PPE ?? null)); ?></td><td class="text-block"><?php echo nl2br($esc($showValue($trainingHistory->proper_comments ?? null))); ?></td></tr>
+                    <tr><td><strong>PPE Usage</strong></td><td><?php echo $esc($showValue($trainingHistory->PPE_usage ?? null)); ?></td><td class="text-block"><?php echo nl2br($esc($showValue($trainingHistory->usage_comments ?? null))); ?></td></tr>
+                </tbody>
+            </table>
         </div>
     </section>
 
