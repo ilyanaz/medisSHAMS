@@ -1651,7 +1651,9 @@ if ($view === 'auth.surveillance_company') {
 };
 
 Route::get('/', function () {
-    return redirect()->route('dashboard');
+    return Auth::check()
+        ? redirect()->route('dashboard')
+        : redirect()->route('login');
 });
 
 Route::get('/dashboard', $render('auth.dashboard'))->name('dashboard');
@@ -2713,6 +2715,7 @@ Route::post('/surveillance/removal-report/save', function (Request $request) use
 
     return redirect()->route('general.report')->with('status', 'Removal report saved successfully.');
 })->name('surveillance.report.removal.save');
+
 
 
 
