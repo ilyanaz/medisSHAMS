@@ -11,6 +11,9 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 
 $passwordMatches = static function (string $plainPassword, string $storedPassword): bool {
+    $trimmedPlainPassword = trim($plainPassword);
+    $trimmedStoredPassword = trim($storedPassword);
+
     try {
         if (Hash::check($plainPassword, $storedPassword)) {
             return true;
@@ -19,7 +22,8 @@ $passwordMatches = static function (string $plainPassword, string $storedPasswor
         // Some imported rows still use plain-text passwords.
     }
 
-    return hash_equals($storedPassword, $plainPassword);
+    return hash_equals($storedPassword, $plainPassword)
+        || hash_equals($trimmedStoredPassword, $trimmedPlainPassword);
 };
 
 $resolveLogoUrl = static function (?string $logo): ?string {
@@ -1938,16 +1942,25 @@ Route::post('/login', function (Request $request) use ($passwordMatches) {
         'password' => ['required', 'string'],
     ]);
 
-    $user = \App\Models\User::query()->where('username', $credentials['username'])->first();
+    $normalizedUsername = trim((string) $credentials['username']);
+    $normalizedPassword = (string) $credentials['password'];
 
-    if (! $user || ! $passwordMatches($credentials['password'], (string) $user->password)) {
-        return redirect()->route('login')
-            ->withErrors(['auth' => 'Invalid username or password.'])
-            ->withInput($request->only('username'));
+    $user = \App\Models\User::query()->where('username', $normalizedUsername)->first();
+
+    if (! $user) {
+        $user = \App\Models\User::query()
+            ->whereRaw('LOWER(TRIM(username)) = ?', [Str::lower($normalizedUsername)])
+            ->first();
     }
 
-    if (hash_equals((string) $user->password, $credentials['password'])) {
-        $user->password = Hash::make($credentials['password']);
+    if (! $user || ! $passwordMatches($normalizedPassword, (string) $user->password)) {
+        return redirect()->route('login')
+            ->withErrors(['auth' => 'Invalid username or password.'])
+            ->withInput(['username' => $normalizedUsername]);
+    }
+
+    if (hash_equals(trim((string) $user->password), trim($normalizedPassword))) {
+        $user->password = Hash::make($normalizedPassword);
         $user->save();
     }
 
@@ -2715,6 +2728,8 @@ Route::post('/surveillance/removal-report/save', function (Request $request) use
 
     return redirect()->route('general.report')->with('status', 'Removal report saved successfully.');
 })->name('surveillance.report.removal.save');
+
+
 
 
 

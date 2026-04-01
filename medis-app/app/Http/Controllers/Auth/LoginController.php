@@ -26,16 +26,25 @@ class LoginController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        $user = User::query()->where('username', $credentials['username'])->first();
+        $normalizedUsername = trim((string) $credentials['username']);
+        $normalizedPassword = (string) $credentials['password'];
 
-        if (! $user || ! $this->passwordMatches($credentials['password'], (string) $user->password)) {
-            return back()
-                ->withErrors(['username' => 'Username or password is incorrect.'])
-                ->onlyInput('username');
+        $user = User::query()->where('username', $normalizedUsername)->first();
+
+        if (! $user) {
+            $user = User::query()
+                ->whereRaw('LOWER(TRIM(username)) = ?', [strtolower($normalizedUsername)])
+                ->first();
         }
 
-        if (hash_equals((string) $user->password, $credentials['password'])) {
-            $user->password = Hash::make($credentials['password']);
+        if (! $user || ! $this->passwordMatches($normalizedPassword, (string) $user->password)) {
+            return back()
+                ->withErrors(['username' => 'Username or password is incorrect.'])
+                ->withInput(['username' => $normalizedUsername]);
+        }
+
+        if (hash_equals(trim((string) $user->password), trim($normalizedPassword))) {
+            $user->password = Hash::make($normalizedPassword);
             $user->save();
         }
 
@@ -93,6 +102,9 @@ class LoginController extends Controller
 
     private function passwordMatches(string $plainPassword, string $storedPassword): bool
     {
+        $trimmedPlainPassword = trim($plainPassword);
+        $trimmedStoredPassword = trim($storedPassword);
+
         try {
             if (Hash::check($plainPassword, $storedPassword)) {
                 return true;
@@ -101,7 +113,8 @@ class LoginController extends Controller
             // Some legacy rows are not bcrypt hashes. Fall back to plain comparison.
         }
 
-        return hash_equals($storedPassword, $plainPassword);
+        return hash_equals($storedPassword, $plainPassword)
+            || hash_equals($trimmedStoredPassword, $trimmedPlainPassword);
     }
 
     private function brandingData(): array
@@ -141,3 +154,5 @@ class LoginController extends Controller
         return asset($normalized);
     }
 }
+
+
