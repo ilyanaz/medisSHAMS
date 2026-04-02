@@ -99,7 +99,9 @@ if (! function_exists('medis_render_navigation_start')) {
     body{margin:0;background:var(--nav-bg);color:var(--text);font-family:"Poppins","Segoe UI",Tahoma,Geneva,Verdana,sans-serif;transition:background .2s ease,color .2s ease}
     .app-shell{height:100vh;display:grid;grid-template-columns:228px 1fr;overflow:hidden}
     .app-shell.is-collapsed{grid-template-columns:84px 1fr}
+    .app-shell.is-mobile-nav-open{overflow:hidden}
     .app-sidebar{height:100vh;overflow:hidden;background:var(--panel-2);border-right:1px solid var(--line);padding:12px 8px 12px 10px;display:flex;flex-direction:column;gap:8px}
+    .app-sidebar-backdrop{display:none}
     .app-brand-row{display:flex;align-items:flex-start;gap:6px;padding:2px 4px 2px}
     .app-brand{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
     .app-brand-logo{width:34px;height:34px;border-radius:10px;background:var(--panel);border:1px solid var(--line);display:inline-flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}
@@ -110,11 +112,11 @@ if (! function_exists('medis_render_navigation_start')) {
     body[data-theme="dark"] .app-brand-text span{color:#8aa0bf}
     .app-toggle-row{display:flex;justify-content:center;padding:0 6px 4px}
     .app-toggle{width:24px;height:24px;border:0;border-radius:0;background:transparent;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;padding:0}
-    .app-toggle svg,.app-nav-link svg,.app-top-action svg,.app-user-menu-link svg,.switch-btn svg{width:18px;height:18px;stroke:#475569;fill:none;stroke-width:1.85;stroke-linecap:round;stroke-linejoin:round}
+    .app-toggle svg,.app-nav-link svg,.app-top-action svg,.app-user-menu-link svg,.switch-btn svg,.app-mobile-menu-btn svg{width:18px;height:18px;stroke:#475569;fill:none;stroke-width:1.85;stroke-linecap:round;stroke-linejoin:round}
     .app-toggle .sidebar-toggle-icon{width:18px;height:18px}
     .app-toggle .toggle-chevron{transition:transform .18s ease;transform-origin:50% 50%}
     .app-shell.is-collapsed .app-toggle .toggle-chevron{transform:scaleX(-1)}
-    body[data-theme="dark"] .app-toggle svg,body[data-theme="dark"] .app-nav-link svg,body[data-theme="dark"] .app-top-action svg,body[data-theme="dark"] .app-user-menu-link svg,body[data-theme="dark"] .switch-btn svg{stroke:#cbd5e1}
+    body[data-theme="dark"] .app-toggle svg,body[data-theme="dark"] .app-nav-link svg,body[data-theme="dark"] .app-top-action svg,body[data-theme="dark"] .app-user-menu-link svg,body[data-theme="dark"] .switch-btn svg,body[data-theme="dark"] .app-mobile-menu-btn svg{stroke:#cbd5e1}
     .app-nav-group{display:grid;gap:4px}
     .app-nav-caption{padding:8px 8px 2px;color:var(--muted);font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em}
     .app-nav-link{display:flex;align-items:center;gap:9px;padding:9px 10px;border:1px solid transparent;border-radius:14px;text-decoration:none;color:var(--text);font-size:.98rem;line-height:1.2;transition:.18s ease}
@@ -150,6 +152,8 @@ if (! function_exists('medis_render_navigation_start')) {
     .app-main{display:grid;grid-template-rows:auto 1fr;min-width:0;height:100vh;overflow:hidden}
     .app-topbar{background:var(--panel);border-bottom:1px solid var(--line);padding:18px 24px;display:flex;align-items:center;justify-content:space-between;gap:18px}
     .app-topbar-left{display:flex;align-items:center;gap:16px;min-width:0}
+    .app-mobile-menu-btn{display:none;width:42px;height:42px;border:1px solid var(--line);border-radius:12px;background:var(--panel);align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+    .app-mobile-menu-btn svg{width:20px;height:20px}
     .app-heading h1{margin:0;font-size:1.34rem;font-weight:500;color:#64748b}.app-heading h1 strong{color:var(--text);font-weight:700}
     body[data-theme="dark"] .app-heading h1{color:#9fb0c8}
     .app-topbar-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
@@ -167,9 +171,43 @@ if (! function_exists('medis_render_navigation_start')) {
     .app-shell.is-collapsed .app-brand-logo{width:44px;height:44px;border-radius:14px}
     .app-shell.is-collapsed .app-user-menu{left:78px;bottom:0}
     .app-shell.is-collapsed .app-toggle-row{justify-content:center;padding:2px 0 6px}
-    @media (max-width:1100px){.app-shell{grid-template-columns:1fr}.app-sidebar{display:none}.app-page{padding:16px}.app-topbar{padding:14px 16px}}
+    @media (max-width:1100px){
+        body{overflow-x:hidden}
+        .app-shell{grid-template-columns:1fr}
+        .app-sidebar{display:flex;position:fixed;top:0;left:0;bottom:0;width:min(84vw,320px);max-width:320px;transform:translateX(-100%);transition:transform .22s ease;z-index:50;box-shadow:0 18px 40px var(--shadow)}
+        .app-shell.is-mobile-nav-open .app-sidebar{transform:translateX(0)}
+        .app-sidebar-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.4);z-index:45}
+        .app-shell.is-mobile-nav-open .app-sidebar-backdrop{display:block}
+        .app-main{width:100%;min-width:0}
+        .app-mobile-menu-btn{display:inline-flex}
+        .app-page{padding:16px}
+        .app-topbar{padding:14px 16px}
+        .app-shell.is-collapsed{grid-template-columns:1fr}
+        .app-shell.is-collapsed .app-sidebar{padding:12px 8px 12px 10px}
+        .app-shell.is-collapsed .app-brand-text,
+        .app-shell.is-collapsed .app-user-meta,
+        .app-shell.is-collapsed .app-sidebar-tools{display:grid}
+        .app-shell.is-collapsed .app-nav-link .label{display:inline-flex}
+        .app-shell.is-collapsed .app-nav-caption{display:block}
+        .app-shell.is-collapsed .app-brand-row,
+        .app-shell.is-collapsed .app-brand,
+        .app-shell.is-collapsed .app-nav-link,
+        .app-shell.is-collapsed .app-user-card{justify-content:flex-start}
+        .app-shell.is-collapsed .app-nav-link{padding:9px 10px}
+        .app-shell.is-collapsed .app-user-card{padding:8px 10px;border-radius:18px;width:100%;height:auto;margin-inline:0}
+        .app-shell.is-collapsed .app-avatar{width:34px;height:34px}
+        .app-shell.is-collapsed .app-brand-logo{width:34px;height:34px;border-radius:10px}
+        .app-shell.is-collapsed .app-user-menu{left:0;bottom:calc(100% + 12px)}
+    }
+    @media (max-width:700px){
+        .app-topbar-right{gap:8px}
+        .app-top-action{width:36px;height:36px}
+        .app-heading h1{font-size:1.1rem}
+        .app-page{padding:12px}
+    }
 </style>
 <div class="app-shell" id="appShell">
+    <div class="app-sidebar-backdrop" id="appSidebarBackdrop"></div>
     <aside class="app-sidebar">
         <div class="app-brand-row">
             <div class="app-brand">
@@ -254,6 +292,7 @@ if (! function_exists('medis_render_navigation_start')) {
     <div class="app-main">
         <header class="app-topbar">
             <div class="app-topbar-left">
+                <button class="app-mobile-menu-btn" id="appMobileMenuBtn" type="button" aria-label="Open navigation"><?php echo medis_nav_icon('menu'); ?></button>
                 <div class="app-heading">
                     <h1><span data-i18n="welcome_back">Welcome back,</span> <strong><?php echo $esc($displayName); ?></strong></h1>
                 </div>
@@ -280,6 +319,8 @@ if (! function_exists('medis_render_navigation_end')) {
 (function () {
     var shell = document.getElementById('appShell');
     var toggle = document.getElementById('appNavToggle');
+    var mobileMenuBtn = document.getElementById('appMobileMenuBtn');
+    var sidebarBackdrop = document.getElementById('appSidebarBackdrop');
     var userPanel = document.getElementById('appUserPanel');
     var userToggle = document.getElementById('appUserToggle');
     var themeDarkBtn = document.getElementById('themeDarkBtn');
@@ -362,6 +403,30 @@ if (! function_exists('medis_render_navigation_end')) {
         }
     }
 
+    function isMobileLayout() {
+        return window.matchMedia && window.matchMedia('(max-width: 1100px)').matches;
+    }
+
+    function closeMobileNav() {
+        if (!shell) {
+            return;
+        }
+
+        shell.classList.remove('is-mobile-nav-open');
+    }
+
+    function openMobileNav() {
+        if (!shell) {
+            return;
+        }
+
+        shell.classList.add('is-mobile-nav-open');
+        if (userPanel && userToggle) {
+            userPanel.classList.remove('is-open');
+            userToggle.setAttribute('aria-expanded', 'false');
+        }
+    }
+
     try {
         if (shell && window.localStorage && window.localStorage.getItem(storageKey) === '1') {
             shell.classList.add('is-collapsed');
@@ -381,6 +446,11 @@ if (! function_exists('medis_render_navigation_end')) {
 
     if (toggle && shell) {
         toggle.addEventListener('click', function () {
+            if (isMobileLayout()) {
+                closeMobileNav();
+                return;
+            }
+
             var collapsed = shell.classList.toggle('is-collapsed');
             try {
                 if (window.localStorage) {
@@ -392,6 +462,21 @@ if (! function_exists('medis_render_navigation_end')) {
                 userToggle.setAttribute('aria-expanded', 'false');
             }
         });
+    }
+
+    if (mobileMenuBtn) {
+        mobileMenuBtn.addEventListener('click', function () {
+            if (shell && shell.classList.contains('is-mobile-nav-open')) {
+                closeMobileNav();
+                return;
+            }
+
+            openMobileNav();
+        });
+    }
+
+    if (sidebarBackdrop) {
+        sidebarBackdrop.addEventListener('click', closeMobileNav);
     }
 
     if (themeDarkBtn && themeLightBtn) {
@@ -430,6 +515,26 @@ if (! function_exists('medis_render_navigation_end')) {
             }
         });
     }
+
+    document.querySelectorAll('.app-sidebar a').forEach(function (link) {
+        link.addEventListener('click', function () {
+            if (isMobileLayout()) {
+                closeMobileNav();
+            }
+        });
+    });
+
+    window.addEventListener('resize', function () {
+        if (!isMobileLayout()) {
+            closeMobileNav();
+        }
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            closeMobileNav();
+        }
+    });
 
     document.querySelectorAll('input[type="text"]').forEach(function (input) {
         var placeholder = (input.getAttribute('placeholder') || '').toLowerCase();
