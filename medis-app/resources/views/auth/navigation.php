@@ -173,7 +173,7 @@ if (! function_exists('medis_render_navigation_start')) {
     .app-shell.is-collapsed .app-toggle-row{justify-content:center;padding:2px 0 6px}
     @media (max-width:1100px){
         body{overflow-x:hidden}
-        .app-shell{grid-template-columns:1fr}
+        .app-shell,.app-shell.is-collapsed{grid-template-columns:1fr !important}
         .app-sidebar{display:flex;position:fixed;top:0;left:0;bottom:0;width:min(84vw,320px);max-width:320px;transform:translateX(-100%);transition:transform .22s ease;z-index:50;box-shadow:0 18px 40px var(--shadow)}
         .app-shell.is-mobile-nav-open .app-sidebar{transform:translateX(0)}
         .app-sidebar-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.4);z-index:45}
@@ -182,26 +182,43 @@ if (! function_exists('medis_render_navigation_start')) {
         .app-mobile-menu-btn{display:inline-flex}
         .app-page{padding:16px}
         .app-topbar{padding:14px 16px}
-        .app-shell.is-collapsed{grid-template-columns:1fr}
+        .app-sidebar,
         .app-shell.is-collapsed .app-sidebar{padding:12px 8px 12px 10px}
-        .app-shell.is-collapsed .app-brand-text,
-        .app-shell.is-collapsed .app-user-meta,
+        .app-brand-text,
+        .app-shell.is-collapsed .app-brand-text{display:grid}
+        .app-user-meta,
+        .app-shell.is-collapsed .app-user-meta{display:grid}
+        .app-sidebar-tools,
         .app-shell.is-collapsed .app-sidebar-tools{display:grid}
+        .app-nav-link .label,
         .app-shell.is-collapsed .app-nav-link .label{display:inline-flex}
+        .app-nav-caption,
         .app-shell.is-collapsed .app-nav-caption{display:block}
+        .app-brand-row,
+        .app-brand,
+        .app-nav-link,
+        .app-user-card,
         .app-shell.is-collapsed .app-brand-row,
         .app-shell.is-collapsed .app-brand,
         .app-shell.is-collapsed .app-nav-link,
         .app-shell.is-collapsed .app-user-card{justify-content:flex-start}
+        .app-nav-link,
         .app-shell.is-collapsed .app-nav-link{padding:9px 10px}
+        .app-user-card,
         .app-shell.is-collapsed .app-user-card{padding:8px 10px;border-radius:18px;width:100%;height:auto;margin-inline:0}
+        .app-avatar,
         .app-shell.is-collapsed .app-avatar{width:34px;height:34px}
+        .app-brand-logo,
         .app-shell.is-collapsed .app-brand-logo{width:34px;height:34px;border-radius:10px}
+        .app-user-menu,
         .app-shell.is-collapsed .app-user-menu{left:0;bottom:calc(100% + 12px)}
+        .app-toggle-row{display:none}
     }
     @media (max-width:700px){
         .app-topbar-right{gap:8px}
         .app-top-action{width:36px;height:36px}
+        .app-topbar{padding:12px}
+        .app-topbar-left{width:100%;min-width:0}
         .app-heading h1{font-size:1.1rem}
         .app-page{padding:12px}
     }
@@ -407,6 +424,28 @@ if (! function_exists('medis_render_navigation_end')) {
         return window.matchMedia && window.matchMedia('(max-width: 1100px)').matches;
     }
 
+    function getStoredCollapsed() {
+        try {
+            return !!(window.localStorage && window.localStorage.getItem(storageKey) === '1');
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function syncSidebarMode() {
+        if (!shell) {
+            return;
+        }
+
+        if (isMobileLayout()) {
+            shell.classList.remove('is-collapsed');
+            closeMobileNav();
+            return;
+        }
+
+        shell.classList.toggle('is-collapsed', getStoredCollapsed());
+    }
+
     function closeMobileNav() {
         if (!shell) {
             return;
@@ -427,11 +466,7 @@ if (! function_exists('medis_render_navigation_end')) {
         }
     }
 
-    try {
-        if (shell && window.localStorage && window.localStorage.getItem(storageKey) === '1') {
-            shell.classList.add('is-collapsed');
-        }
-    } catch (error) {}
+    syncSidebarMode();
 
     var savedTheme = 'light';
     var savedLang = 'en';
@@ -457,6 +492,7 @@ if (! function_exists('medis_render_navigation_end')) {
                     window.localStorage.setItem(storageKey, collapsed ? '1' : '0');
                 }
             } catch (error) {}
+            syncSidebarMode();
             if (userPanel && userToggle) {
                 userPanel.classList.remove('is-open');
                 userToggle.setAttribute('aria-expanded', 'false');
@@ -525,9 +561,7 @@ if (! function_exists('medis_render_navigation_end')) {
     });
 
     window.addEventListener('resize', function () {
-        if (!isMobileLayout()) {
-            closeMobileNav();
-        }
+        syncSidebarMode();
     });
 
     document.addEventListener('keydown', function (event) {
